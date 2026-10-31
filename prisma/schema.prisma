@@ -1,0 +1,219 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/eduportal_manueldamaia/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PROFESSOR
+  ALUNO
+  ENCARREGADO
+}
+
+enum EstadoEntrega {
+  POR_REALIZAR
+  ENTREGUE
+  ATRASADO
+  AVALIADO
+}
+
+model Utilizador {
+  id            String    @id @default(cuid())
+  nome          String
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(ALUNO)
+  ativo         Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  professorTurmas  ProfessorTurma[]
+  turmaAlunos      TurmaAluno[]
+  trabalhos        Trabalho[]
+  entregas         Entrega[]
+  avaliacoes       Avaliacao[]
+  notificacoes     Notificacao[]
+  auditLogs        AuditLog[]
+
+  // EE relations
+  encarregadoDe    EncarregadoEducando[] @relation("Encarregado")
+  educandoDe       EncarregadoEducando[] @relation("Educando")
+
+  @@map("utilizadores")
+}
+
+model AnoLetivo {
+  id        String   @id @default(cuid())
+  nome      String   @unique
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  turmas Turma[]
+
+  @@map("anos_letivos")
+}
+
+model Turma {
+  id          String   @id @default(cuid())
+  nome        String
+  anoLetivoId String
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  anoLetivo   AnoLetivo @relation(fields: [anoLetivoId], references: [id])
+  professores ProfessorTurma[]
+  alunos      TurmaAluno[]
+  trabalhos   Trabalho[]
+
+  @@unique([nome, anoLetivoId])
+  @@map("turmas")
+}
+
+model ProfessorTurma {
+  id          String @id @default(cuid())
+  professorId String
+  turmaId     String
+
+  professor Utilizador @relation(fields: [professorId], references: [id], onDelete: Cascade)
+  turma     Turma      @relation(fields: [turmaId], references: [id], onDelete: Cascade)
+
+  @@unique([professorId, turmaId])
+  @@map("professor_turmas")
+}
+
+model TurmaAluno {
+  id            String   @id @default(cuid())
+  turmaId       String
+  alunoId       String
+  dataInscricao DateTime @default(now())
+
+  turma Turma      @relation(fields: [turmaId], references: [id], onDelete: Cascade)
+  aluno Utilizador @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+
+  @@unique([turmaId, alunoId])
+  @@map("turma_alunos")
+}
+
+model EncarregadoEducando {
+  id             String @id @default(cuid())
+  encarregadoId  String
+  educandoId     String
+
+  encarregado Utilizador @relation("Encarregado", fields: [encarregadoId], references: [id], onDelete: Cascade)
+  educando    Utilizador @relation("Educando", fields: [educandoId], references: [id], onDelete: Cascade)
+
+  @@unique([encarregadoId, educandoId])
+  @@map("encarregado_educandos")
+}
+
+model Trabalho {
+  id                     String    @id @default(cuid())
+  turmaId                String
+  professorId            String
+  titulo                 String
+  descricao              String?   @db.Text
+  ficheiroNome           String?
+  ficheiroPath           String?
+  ficheiroPublic         Boolean   @default(false)
+  dataPublicacao         DateTime  @default(now())
+  deadline               DateTime?
+  pesoAvaliacao          Float?    @default(1.0)
+  permiteEntregaAposPrazo Boolean  @default(false)
+  publicado              Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  turma     Turma      @relation(fields: [turmaId], references: [id], onDelete: Cascade)
+  professor Utilizador @relation(fields: [professorId], references: [id])
+  entregas  Entrega[]
+
+  @@index([turmaId])
+  @@index([professorId])
+  @@map("trabalhos")
+}
+
+model Entrega {
+  id            String         @id @default(cuid())
+  trabalhoId    String
+  alunoId       String
+  ficheiroNome  String?
+  ficheiroPath  String?
+  ficheiroPublic Boolean       @default(false)
+  versao        Int            @default(1)
+  entregueEm    DateTime       @default(now())
+  emAtraso      Boolean        @default(false)
+  estado        EstadoEntrega  @default(POR_REALIZAR)
+  createdAt     DateTime       @default(now())
+
+  trabalho  Trabalho    @relation(fields: [trabalhoId], references: [id], onDelete: Cascade)
+  aluno     Utilizador  @relation(fields: [alunoId], references: [id])
+  avaliacao Avaliacao?
+
+  @@index([trabalhoId, alunoId])
+  @@map("entregas")
+}
+
+model Avaliacao {
+  id          String    @id @default(cuid())
+  entregaId   String    @unique
+  professorId String
+  nota        Float
+  comentario  String?   @db.Text
+  publicada   Boolean   @default(false)
+  publicadaEm DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  entrega   Entrega    @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  professor Utilizador @relation(fields: [professorId], references: [id])
+
+  @@map("avaliacoes")
+}
+
+model Notificacao {
+  id           String   @id @default(cuid())
+  utilizadorId String
+  tipo         String
+  titulo       String
+  mensagem     String   @db.Text
+  lida         Boolean  @default(false)
+  link         String?
+  createdAt    DateTime @default(now())
+
+  utilizador Utilizador @relation(fields: [utilizadorId], references: [id], onDelete: Cascade)
+
+  @@index([utilizadorId, lida])
+  @@map("notificacoes")
+}
+
+model ConfiguracaoPlataforma {
+  chave     String @id
+  valor     String @db.Text
+  descricao String?
+
+  @@map("configuracao_plataforma")
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  utilizadorId String?
+  acao         String
+  entidade     String
+  entidadeId   String?
+  detalhes     String?  @db.Text
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  utilizador Utilizador? @relation(fields: [utilizadorId], references: [id])
+
+  @@index([createdAt])
+  @@index([utilizadorId])
+  @@map("audit_logs")
+}
